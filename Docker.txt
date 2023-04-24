@@ -1,0 +1,212 @@
+**Docker Image**
+
+Image включает все, что вам нужно для запуска вашего приложения
+Скомпилированный бинарник приложения, runtime, библиотеки, 
+и другие ресурсы, необходимые вашему приложению
+**Dockerfile**
+FROM golang:1.19
+Загружаем  в image golang с версией 1.19
+WORKDIR /app
+Создаем директорию, внутри image, который мы делаем
+Также говорим докеру, что это
+пункт назначения по умолчанию для всех последующих команд.
+COPY go.mod go.sum ./
+Копируем файлы в image
+Мы хотим скопировать файл go.mod и файл go.sum в image
+из нашей директории
+./ это указывает, что мы в текущей директории, /app
+внутри image
+RUN go mod download
+Загружаем модули в image
+COPY *.go ./
+Данная команда копирует все файлы с расширением .go
+,расположенные в текущей директории, директории, где
+расположен Dockerfile
+RUN CGO_ENABLED=0 GOOS=linux go build -o /docker-gs-ping
+Команда для компиляции приложения
+Результатом компиляции будет бинарный файл
+docker-gs-ping
+Он будет расположен в корне файловой системы image, который мы создаем
+CMD ["/docker-gs-ping"]
+Данная команда указывает докеру, какую команду выполнять
+когда ваш image используется для запуска контейнера
+
+**Build the image**
+
+Когда создали Dockerfile, нужно создать для него image
+Команда docker build создает Docker-образ из Dockerfile и "контекста". 
+Контекст сборки - это набор файлов, 
+расположенных по указанному пути или URL. 
+Процесс сборки Docker может получить доступ к любому из файлов, 
+расположенных в контексте
+
+
+docker build --tag docker-gs-ping .
+
+--tag данное ключевое слово назвать ваш image
+
+docker image tag docker-gs-ping:latest docker-gs-ping:v1.0
+Image может иметь несколько тегов
+(В примере выше добавляем еще новый тег к существующему)
+Мы создали новый image, мы просто добавили дополнительный tag
+
+
+docker image ls
+
+Показать все docker image
+
+docker image rm docker-gs-ping:v1.0
+Удалить тег image
+Мы не удаляем image, удаляем только tag
+
+
+
+
+Возможно, вы заметили, что наш образ docker-gs-ping весит более гигабайта (!!!), 
+что очень много для крошечного скомпилированного приложения Go. 
+Вам также может быть интересно, что случилось с полным набором инструментов Go, 
+включая компилятор, после того, как мы собрали наш образ.
+Ответ заключается в том, что полный набор инструментов все еще находится там, 
+в образе контейнера. Это не только неудобно из-за большого размера файла, 
+но и может представлять угрозу безопасности при 
+развертывании контейнера.
+
+
+Эти две проблемы можно решить с помощью многоэтапных сборок.
+
+В двух словах, многоэтапная сборка может переносить 
+артефакты с одного этапа сборки на другой, 
+и каждый этап сборки может быть инстанцирован 
+из разных базовых образов.
+
+Команды для нового image, в нем не будет тулзов golang, для сокращения объема
+# syntax=docker/dockerfile:1
+
+##
+## Build the application from source
+##
+
+FROM golang:1.19 AS build-stage
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY *.go ./
+
+RUN CGO_ENABLED=0 GOOS=linux go build -o /docker-gs-ping
+
+##
+## Run the tests in the container
+##
+
+FROM build-stage AS run-test-stage
+RUN go test -v ./...
+
+##
+## Deploy the application binary into a lean image
+##
+
+FROM gcr.io/distroless/base-debian11 AS build-release-stage
+
+WORKDIR /
+
+COPY --from=build-stage /docker-gs-ping /docker-gs-ping
+
+EXPOSE 8080
+
+USER nonroot:nonroot
+
+ENTRYPOINT ["/docker-gs-ping"]
+
+
+
+
+
+**Запускаем image**
+ docker run docker-gs-ping
+ 
+ Чтобы написать порт нашего контейнера, мы используем
+ --publish флаг (для сокращения -p)
+ Порты могут быть разные у нас и в контейнере
+ 
+ **Правильная команда для запуска контейнера**
+ docker run -t -i --publish 8080:8080 docker-gs-ping
+ 
+ флаги -t -i
+ Помогают приостановить контейнер командой CTRL + C
+ 
+ 
+ 
+ Наш пример приложения - это веб-сервер, 
+ и нам не нужно, чтобы терминал был подключен к контейнеру. 
+ Docker может запустить ваш контейнер в отсоединенном режиме
+ , то есть в фоновом режиме. Для этого мы можем 
+ использовать параметр --detach или -d для краткости. 
+ Docker запустит ваш контейнер так же, как и раньше, 
+ но на этот раз "отсоединится" от контейнера и вернет 
+ вас к приглашению терминала.
+ 
+ 
+ docker run -t -i -d -p 8080:8080 docker-gs-ping 
+ Теперь контейнер запускается на фоне
+ 
+ **Показать контейнеры, запущенные на нашей машине**
+ docker ps
+ **Приостановить контейнер**
+ docker stop funny_leavitt
+ **Показать все контейнеры, даже не запущенные**
+ docker ps -all
+ **Перезапустить контейнер**
+  docker restart funny_leavitt
+  **Удалить контейнер**
+  docker rm funny_leavitt
+  **Удалить несколько контейнеров**
+  docker rm flamboyant_lamport nostalgic_easley condescending_burnell blissful_grothendieck
+  **Удалить все остановленные контейнеры**
+  docker container prune
+  **Переименовать контейнер**
+  docker run -d -p 8080:8080 --name rest-server docker-gs-ping
+  
+  
+  **Подключаем Базу данных**
+  Смысл базы данных заключается в постоянном 
+  хранении данных. Volume(Тома) являются 
+  предпочтительным механизмом для 
+  сохранения данных, создаваемых и 
+  используемых контейнерами Docker. 
+  Поэтому, прежде чем запустить CockroachDB, 
+  давайте создадим для нее том.
+  docker volume create roach
+  Создать управляемый топ
+ **Показать все volume(тома)**
+ docker volume list
+ 
+ **Networking**
+ docker network create -d bridge mynet
+ Создать новую bridge сеть с названием mynet
+ docker network list
+ Показать все сети
+ 
+ Наша мостовая сеть mynet была успешно создана. 
+ Остальные три сети, названные bridge, host и none, 
+ являются сетями по умолчанию и были созданы самим Docker.
+ 
+ **Достать image с Базой Данных**
+  docker run -d \
+  --name roach \
+  --hostname db \
+  --network mynet \
+  -p 26257:26257 \
+  -p 8080:8080 \
+  -v roach:/cockroach/cockroach-data \
+  cockroachdb/cockroach:latest-v20.1 start-single-node \
+  --insecure
+  
+  
+  
+  **Запустить оболочку SQL**
+  docker exec -it roach ./cockroach sql --insecure
+  Запустить оболочку SQL в том же контейнере,
+  где запущена база данных
