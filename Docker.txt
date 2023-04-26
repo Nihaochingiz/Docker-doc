@@ -210,3 +210,39 @@ ENTRYPOINT ["/docker-gs-ping"]
   docker exec -it roach ./cockroach sql --insecure
   Запустить оболочку SQL в том же контейнере,
   где запущена база данных
+  
+  
+  FROM golang:1.16 as base
+  
+  Данная инструкция говорит докеру создать stage для нашего контейнера
+  с названием base
+  Мы создаем этот контейнер на основе официального контейнера golang
+  
+  FROM base as dev
+Создаем еще один stage под названием "dev", который будет основан 
+на нашем stage "base" (чтобы у нас был доступен golang)
+RUN curl -sSfL https://raw.githubusercontent.com/cosmtrek/air/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+Скачиваем бинарник программы AIR для live перегрузки
+
+WORKDIR /opt/app/api
+CMD ["air"]
+
+Выполняем команду air в каталоге, где будет находиться наш код
+
+
+version: 3.9
+services:
+  app:
+   build:
+     dockerfile: Dockerfile
+     context: .
+     target: dev
+  volumes:
+     - .:/opt/app/api
+	 
+	 
+	 Значение services.app.build.target установлено на "dev" - Это тот же dev, что и stage в Dockerfile.
+	 
+	 
+	 Значение services.app.volumes[0] встраивает текущую директорию в тот же 
+	 WORKDIR на стадии "dev" нашего Dockerfile.
