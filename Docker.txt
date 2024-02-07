@@ -246,3 +246,8 @@ services:
 	 
 	 Значение services.app.volumes[0] встраивает текущую директорию в тот же 
 	 WORKDIR на стадии "dev" нашего Dockerfile.
+
+С версии Docker 4.26.
+Можно делать команду 
+docker init
+Будет template для docker
